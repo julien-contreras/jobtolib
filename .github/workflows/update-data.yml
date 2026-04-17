@@ -48,6 +48,7 @@ jobs:
           git config --local user.name "GitHub Action Bot"
           git add data/
           git commit -m "📊 Update: Enterprise data updated at $(date)" || echo "No changes to commit"
+          git pull --rebase origin main
           git push
       
       - name: "✅ Success notification"
