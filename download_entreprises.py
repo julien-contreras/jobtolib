@@ -86,45 +86,88 @@ class EntrepriseDownloader:
             self.log(f"⚠️ Erreur parsing entreprise: {e}")
             return None
     
+    def fetch_page_with_params(self, page: int, **kwargs) -> Dict:
+        """Récupère une page de résultats avec paramètres personnalisés"""
+        params = {
+            "per_page": PER_PAGE,
+            "page": page,
+            "etat_administratif": "A"  # Seulement entreprises ACTIVES
+        }
+        params.update(kwargs)
+        
+        try:
+            response = requests.get(API_BASE_URL, params=params, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            self.log(f"❌ Erreur requête page {page}: {e}")
+            return {"results": [], "total_results": 0}
+    
     def download_all(self):
-        """Télécharge toutes les entreprises actives"""
+        """Télécharge toutes les entreprises actives par secteur"""
         self.log("🚀 Début du téléchargement des entreprises (Option B)")
-        self.log(f"📊 Configuration: {PER_PAGE} par page, max {MAX_PAGES} pages")
+        self.log("📊 Configuration: Téléchargement par secteur d'activité")
         
-        total_fetched = 0
-        page = 1
-        has_more = True
+        # Secteurs NAF à télécharger (clés principales)
+        secteurs = [
+            ('J', 'Informatique/Télécoms'),
+            ('M', 'Conseil/Ingénierie'),
+            ('K', 'Finance/Immobilier'),
+            ('G', 'Commerce/Transport'),
+            ('N', 'Services aux entreprises'),
+            ('C', 'Industrie'),
+            ('F', 'Construction'),
+            ('P', 'Enseignement'),
+            ('Q', 'Santé/Action sociale'),
+            ('H', 'Hébergement/Restauration'),
+            ('I', 'Transports'),
+            ('L', 'Administration'),
+            ('R', 'Arts/Culture'),
+            ('S', 'Services divers'),
+        ]
         
-        while has_more and page <= MAX_PAGES:
-            self.log(f"📄 Récupération page {page}...")
+        for secteur_code, secteur_name in secteurs:
+            self.log(f"\n📂 Secteur {secteur_code} - {secteur_name}")
             
-            data = self.fetch_page(page)
-            results = data.get("results", [])
-            total_results = data.get("total_results", 0)
+            page = 1
+            has_more = True
+            secteur_count = 0
             
-            if not results:
-                self.log(f"✅ Fin du téléchargement (page {page} vide)")
-                break
+            while has_more and page <= MAX_PAGES:
+                self.log(f"   📄 Page {page}...", end=" ")
+                
+                # Requête avec secteur
+                data = self.fetch_page_with_params(
+                    page, 
+                    section_activite_principale=secteur_code
+                )
+                results = data.get("results", [])
+                
+                if not results:
+                    self.log("(vide)")
+                    break
+                
+                # Nettoyer et ajouter
+                cleaned_count = 0
+                for entreprise in results:
+                    cleaned = self.clean_entreprise(entreprise)
+                    if cleaned:
+                        self.all_entreprises.append(cleaned)
+                        cleaned_count += 1
+                        secteur_count += 1
+                
+                self.log(f"✓ {cleaned_count}/{len(results)}")
+                
+                # Vérifier s'il y a d'autres pages
+                has_more = len(results) == PER_PAGE and page < MAX_PAGES
+                page += 1
+                
+                # Respecter l'API avec un délai
+                time.sleep(DELAY_BETWEEN_REQUESTS)
             
-            # Nettoyer et ajouter
-            cleaned_count = 0
-            for entreprise in results:
-                cleaned = self.clean_entreprise(entreprise)
-                if cleaned:
-                    self.all_entreprises.append(cleaned)
-                    cleaned_count += 1
-            
-            total_fetched += len(results)
-            self.log(f"   ✓ {len(results)} résultats, {cleaned_count} nettoyés (total: {len(self.all_entreprises)})")
-            
-            # Vérifier s'il y a d'autres pages
-            has_more = len(results) == PER_PAGE and page < MAX_PAGES
-            page += 1
-            
-            # Respecter l'API avec un délai
-            time.sleep(DELAY_BETWEEN_REQUESTS)
+            self.log(f"   ✅ {secteur_count} entreprises du secteur {secteur_code}")
         
-        self.log(f"✅ Téléchargement terminé: {len(self.all_entreprises)} entreprises nettoyées")
+        self.log(f"\n✅ Téléchargement terminé: {len(self.all_entreprises)} entreprises nettoyées")
         return len(self.all_entreprises)
     
     def save_split_by_letter(self):
