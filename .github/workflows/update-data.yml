@@ -1,3 +1,4 @@
+
 name: Update Enterprise Data Weekly
 
 on:
@@ -46,10 +47,11 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action Bot"
+          git fetch origin main
+          git reset --hard origin/main
           git add data/
           git commit -m "📊 Update: Enterprise data updated at $(date)" || echo "No changes to commit"
-          git pull --rebase origin main
-          git push
+          git push origin main
       
       - name: "✅ Success notification"
         run: echo "🎉 Data update completed successfully at $(date)"
